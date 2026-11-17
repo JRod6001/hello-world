@@ -1,0 +1,12 @@
+{
+  "appId": "com.example.staticbloom",
+  "appName": "Static Bloom",
+  "webDir": "www",
+  "backgroundColor": "#05020d",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#05020d",
+    "scrollEnabled": false,
+    "allowsLinkPreview": false
+  }
+}

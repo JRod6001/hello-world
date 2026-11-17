@@ -1,0 +1,73 @@
+<canvas id="c" tabindex="0" aria-label="Static Bloom game view"></canvas>
+<div id="sa"></div>
+<button id="pauseBtn" aria-label="Pause" hidden>II</button>
+<div id="ui">
+  <section id="title" class="screen">
+    <p class="eyebrow">A neon courier run</p>
+    <h1 class="logo">STATIC <span>BLOOM</span></h1>
+    <div class="stats"><span>BEST <b id="tBest">0</b></span><span>CRED <b id="tCred">0</b></span></div>
+    <div class="btns">
+      <button id="bRun" class="btn primary wide" data-focus>Run</button>
+      <button id="bDaily" class="btn wide">Daily run<small id="tDaily">new route today</small></button>
+      <button id="bGarage" class="btn">Garage</button>
+      <button id="bSettings" class="btn">Settings</button>
+    </div>
+    <div class="panel"><h2>Contracts</h2><ul id="tContracts" class="rows"></ul></div>
+  </section>
+  <section id="garage" class="screen" hidden>
+    <h2 class="head">Garage</h2>
+    <div class="stats"><span>CRED <b id="gCred">0</b></span></div>
+    <div class="panel"><ul id="gList" class="rows"></ul></div>
+    <p class="note">Cred comes from score, shards and paid contracts.</p>
+    <button id="gBack" class="btn" data-focus>Back</button>
+  </section>
+  <section id="settings" class="screen" hidden>
+    <h2 class="head">Settings</h2>
+    <div class="panel set">
+      <label for="sMus">Music<input id="sMus" type="range" min="0" max="100" step="5"></label>
+      <label for="sSfx">Effects<input id="sSfx" type="range" min="0" max="100" step="5"></label>
+      <label for="sHap">Haptics<input id="sHap" type="checkbox"></label>
+      <label for="sCalm"><span>Reduce flashing<small>Turns off screen flashes, shake and strobing static.</small></span><input id="sCalm" type="checkbox"></label>
+    </div>
+    <div class="panel"><h2>Soundtrack</h2><ul id="sTracks" class="rows"></ul></div>
+    <div class="btns">
+      <button id="sHow" class="btn">How to play</button>
+      <button id="sReset" class="btn danger">Erase progress</button>
+      <button id="sBack" class="btn wide" data-focus>Back</button>
+    </div>
+    <p class="note">Static Bloom keeps your progress on this device and collects no data. Typefaces: Orbitron and Share Tech Mono, SIL Open Font License.</p>
+  </section>
+  <section id="howto" class="screen" hidden>
+    <h2 class="head">How to play</h2>
+    <div class="panel"><ul class="rows how">
+      <li><b>Steer</b><span>Hold the left or right edge of the screen. Keyboard: arrow keys or A and D.</span></li>
+      <li><b>Harpoon</b><span>When the readout says LOCK, tap the centre of the screen or press Space. You reel in, then slingshot.</span></li>
+      <li><b>Slingshot</b><span>You phase through traffic and purge static while it burns. Chain harpoons to keep it alive.</span></li>
+      <li><b>Brake</b><span>Hold both edges, or press the down arrow.</span></li>
+      <li><b>Time</b><span>Near misses, shards and slingshots add seconds. Reach the drop zone before the window closes.</span></li>
+      <li><b>Static</b><span>Glitching blocks cost three seconds and scramble your steering. A shield absorbs one hit.</span></li>
+    </ul></div>
+    <button id="hBack" class="btn" data-focus>Back</button>
+  </section>
+  <section id="pause" class="screen" hidden>
+    <h2 class="head">Paused</h2>
+    <div class="btns">
+      <button id="pResume" class="btn primary wide" data-focus>Resume</button>
+      <button id="pRestart" class="btn">Restart</button>
+      <button id="pQuit" class="btn quiet">Quit</button>
+    </div>
+  </section>
+  <section id="over" class="screen" hidden>
+    <h2 class="head">Signal lost</h2>
+    <p id="oZone" class="note"></p>
+    <p id="oBest" class="flag" hidden>New best</p>
+    <p id="oScore" class="score">0</p>
+    <div class="panel"><ul id="oStats" class="rows"></ul></div>
+    <p id="oCon" class="note" hidden></p>
+    <div class="btns">
+      <button id="oAgain" class="btn primary wide" data-focus>Run again</button>
+      <button id="oGarage" class="btn">Garage</button>
+      <button id="oTitle" class="btn quiet">Title</button>
+    </div>
+  </section>
+</div>
