@@ -735,6 +735,10 @@ class Renderer:
                 self.text(cx0, body_top + 10, "No descendants recorded", 9, style="italic", fill=P["faint"])
             else:
                 ncol, colw, scale, laid = cols_plan
+                if ncol == 1:  # shrink-wrap a single column so it sits visually centred
+                    widest = max(self._segw(segs, size) + self.INDENT.get(lvl % 10, 0) + 11
+                                 for (lvl, segs, size, _) in laid[0])
+                    colw = min(colw, widest + 28)
                 bx = W / 2 - ncol * colw / 2
                 for ci, col in enumerate(laid):
                     x0 = bx + ci * colw + 14
