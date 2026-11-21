@@ -13,7 +13,9 @@
 
 ## Getting the data out of FamilySearch
 
-FamilySearch doesn't export GEDCOM directly. Sync the person and their relatives into a FamilySearch-certified desktop program (RootsMagic, Ancestral Quest or Legacy), then export GEDCOM 5.5.1 with FamilySearch IDs included (`_FSFTID`). A hand-written JSON file also works; see `Tree.from_json`.
+**Option A (official):** FamilySearch → [Download your family tree](https://familysearch.org/innovate/export) gives a GEDCOM 7 file (`.ged` or `.gdz`, both accepted) of up to 8 generations of *your own* ancestors. It does not cover descendants or someone else's tree.
+
+**Option B (full control):** sync into a free FamilySearch-certified desktop app (RootsMagic Essentials, Ancestral Quest Basics), then File → Export → GEDCOM. This route works for any person and includes descendants.
 
 ## Usage
 

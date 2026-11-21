@@ -69,6 +69,13 @@ class Tree:
     def from_gedcom(cls, path: Path) -> "Tree":
         t = cls()
         raw = path.read_bytes()
+        if raw[:2] == b"PK":  # GEDCOM 7 zip package (.gdz) — use the .ged inside
+            import io, zipfile
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                name = next((n for n in z.namelist() if n.lower().endswith(".ged")), None)
+                if not name:
+                    sys.exit("error: no .ged file inside the archive")
+                raw = z.read(name)
         text = raw.decode("utf-8-sig", errors="replace")
         rec = None          # current Person/Family
         ev = None           # current Event
@@ -110,8 +117,8 @@ class Tree:
                         ev = rec.death
                         if val.upper() == "Y":
                             rec.living = False
-                    elif tag in ("_FSFTID", "_FSID", "_FID") or (tag == "REFN" and re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{3,4}", val)):
-                        rec.fsid = rec.fsid or val
+                    elif tag in ("_FSFTID", "_FSID", "_FID") or (tag in ("REFN", "EXID", "UID") and re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{3,4}", val.split("/")[-1])):
+                        rec.fsid = rec.fsid or val.split("/")[-1]
                     elif tag == "_LIVING" or tag == "LIVING":
                         rec.living = val.upper() in ("Y", "YES", "TRUE", "1")
                     elif tag == "FAMC":
