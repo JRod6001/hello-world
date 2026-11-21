@@ -719,7 +719,7 @@ class Renderer:
     def __init__(self, tree: Tree, focus: Person, up=4, down=3, page="tabloid",
                  title=None, subtitle=None, show_ids=True, redact_living=False,
                  background=True, note=None, couple: Family | None = None,
-                 style="classic", desc_layout="tree", tree_art=None):
+                 style="classic", desc_layout="tree", tree_art=None, bg_image=None, bg_opacity=0.32):
         self.t, self.f = tree, focus
         self.up, self.down = max(1, min(4, up)), max(0, min(3, down))
         pw, ph = PAGES[page]
@@ -735,6 +735,9 @@ class Renderer:
             self.theme["tree_art"] = tree_art
         PALETTE.clear(); PALETTE.update(self.theme["palette"])
         self.desc_layout = desc_layout
+        self.bg_image, self.bg_opacity = bg_image, bg_opacity
+        if bg_image and tree_art is None:
+            self.theme["tree_art"] = 0.0   # the photo replaces the drawn tree
         self.warnings: list[str] = []
 
     # ── helpers ──
@@ -982,6 +985,17 @@ class Renderer:
             S.append(f'<rect x="0" y="0" width="{W}" height="{H:.2f}" fill="{P["paper"]}"/>')
         if self.theme.get("aged"):
             S.append(aged_paper(W, H, P))
+        if self.bg_image:
+            import base64, mimetypes
+            mime = mimetypes.guess_type(str(self.bg_image))[0] or "image/jpeg"
+            data = base64.b64encode(Path(self.bg_image).read_bytes()).decode()
+            S.append(f'<defs><clipPath id="ft-photo"><rect x="38" y="38" width="{W - 76}" height="{H - 76:.2f}"/></clipPath>'
+                     f'<radialGradient id="ft-photo-fade" cx="50%" cy="50%" r="70%"><stop offset="55%" stop-color="#fff"/>'
+                     f'<stop offset="100%" stop-color="#000"/></radialGradient>'
+                     f'<mask id="ft-photo-mask"><rect width="{W}" height="{H:.2f}" fill="url(#ft-photo-fade)"/></mask></defs>'
+                     f'<g clip-path="url(#ft-photo)" mask="url(#ft-photo-mask)" style="mix-blend-mode:multiply" opacity="{self.bg_opacity}">'
+                     f'<image href="data:{mime};base64,{data}" x="38" y="38" width="{W - 76}" height="{H - 76:.2f}" '
+                     f'preserveAspectRatio="xMidYMid slice" style="filter:sepia(0.6) contrast(1.05)"/></g>')
         if self.theme["tree_art"]:
             S.append(f'<defs><clipPath id="ft-inner"><rect x="36" y="36" width="{W - 72}" height="{H - 72:.2f}"/></clipPath></defs>'
                      f'<g clip-path="url(#ft-inner)">'
@@ -1523,6 +1537,8 @@ def main(argv=None):
     ap.add_argument("--descendants", default="tree", choices=["tree", "list"],
                     help="draw descendants as connected cards (tree) or an indented outline (list)")
     ap.add_argument("--tree-art", type=float, help="opacity of the background woodcut tree (0 to hide)")
+    ap.add_argument("--bg-image", type=Path, help="photo or engraving to fade in behind the chart")
+    ap.add_argument("--bg-opacity", type=float, default=0.32, help="strength of --bg-image (default 0.32)")
     ap.add_argument("--no-ids", action="store_true", help="hide FamilySearch IDs")
     ap.add_argument("--redact-living", action="store_true", help="show 'Living' instead of dates for living people")
     ap.add_argument("--no-background", action="store_true", help="white paper (saves ink)")
@@ -1540,7 +1556,7 @@ def main(argv=None):
             sys.exit("error: --couple needs the focus person to have a spouse")
     r = Renderer(tree, focus, a.up, a.down, a.page, a.title, a.subtitle,
                  not a.no_ids, a.redact_living, not a.no_background, a.note, couple,
-                 a.style, a.descendants, a.tree_art)
+                 a.style, a.descendants, a.tree_art, a.bg_image, a.bg_opacity)
     svg = r.render()
     a.out.write_text(svg, encoding="utf-8")
     if couple:

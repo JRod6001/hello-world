@@ -33,6 +33,7 @@ python3 familytree.py tree.ged --focus KWZ1-ABC -o tree.svg --pdf tree.pdf
 | `--couple` | off | centres the chart on the focus person and their spouse together |
 | `--style` | classic | `classic`, `woodcut` (background tree, carved border), `heirloom` (ornate border, shaped cards) or `victorian` (aged parchment, guilloché border, script title) |
 | `--descendants` | tree | `tree` draws descendants as connected cards; `list` uses an indented outline |
+| `--bg-image`, `--bg-opacity` | none, 0.32 | fade a photo or engraving in behind the chart (replaces the drawn tree) |
 | `--tree-art` | per style | opacity of the background woodcut tree, `0` hides it |
 | `--no-ids` | off | hides FamilySearch IDs |
 | `--no-background` | off | white paper, to save ink |
