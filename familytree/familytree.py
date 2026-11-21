@@ -217,6 +217,22 @@ class Tree:
                     anc[2 * n + 1] = mo
         return anc
 
+    def ahnentafel_family(self, fam: Family, depth: int) -> dict[int, Person]:
+        """Pedigree for a couple: 2 = husband, 3 = wife (no person at position 1)."""
+        anc = {}
+        if fam.husb in self.people:
+            anc[2] = self.people[fam.husb]
+        if fam.wife in self.people:
+            anc[3] = self.people[fam.wife]
+        for n in range(2, 2 ** depth):
+            if n in anc:
+                fa, mo = self.parents(anc[n])
+                if fa:
+                    anc[2 * n] = fa
+                if mo:
+                    anc[2 * n + 1] = mo
+        return anc
+
     def unions(self, p: Person):
         """[(spouse|None, Family, [children sorted by birth])]"""
         out = []
@@ -438,7 +454,7 @@ GEN = {
 class Renderer:
     def __init__(self, tree: Tree, focus: Person, up=4, down=3, page="tabloid",
                  title=None, subtitle=None, show_ids=True, redact_living=False,
-                 background=True, note=None):
+                 background=True, note=None, couple: Family | None = None):
         self.t, self.f = tree, focus
         self.up, self.down = max(1, min(4, up)), max(0, min(3, down))
         pw, ph = PAGES[page]
@@ -448,6 +464,7 @@ class Renderer:
         self.title, self.subtitle = title, subtitle
         self.ids, self.redact, self.bg, self.note = show_ids, redact_living, background, note
         self.svg: list[str] = []
+        self.couple = couple
         self.warnings: list[str] = []
 
     # ── helpers ──
@@ -513,7 +530,9 @@ class Renderer:
                 lines.append((fit_text("b. " + b, iw, sizes["l1"]), sizes["l1"], dict(style="italic", fill=PALETTE["ink2"])))
             if d:
                 lines.append((fit_text("d. " + d, iw, sizes["l2"]), sizes["l2"], dict(style="italic", fill=PALETTE["ink2"])))
-            if not b and not d and ls:
+            if not (p.birth.place or p.death.place) and ls:
+                lines = lines[:2] + [(ls, sizes["l1"], dict(style="italic", fill=PALETTE["ink2"]))]
+            elif not b and not d and ls:
                 lines.append((ls, sizes["l1"], dict(style="italic", fill=PALETTE["ink2"])))
         elif ls:
             lines.append((fit_text(ls, iw, sizes["l1"]), sizes["l1"], dict(fill=PALETTE["ink2"])))
@@ -539,19 +558,22 @@ class Renderer:
         P = PALETTE
         mx = 70.0                       # side margin for tree content
         CW = W - 2 * mx
-        anc = self.t.ahnentafel(self.f, self.up)
+        cpl = self.couple
+        anc = self.t.ahnentafel_family(cpl, self.up) if cpl else self.t.ahnentafel(self.f, self.up)
         depth = self.up
         while depth > 1 and not any(n in anc for n in range(2 ** depth, 2 ** (depth + 1))):
             depth -= 1                  # don't reserve rows for empty generations
         # rows (top = oldest)
         vgap = 26.0
         top = 132.0
-        row_y = {}
-        cur = top
-        for g in range(depth, -1, -1):
-            row_y[g] = cur
-            cur += GEN[g]["h"] + vgap
-        tree_bottom = row_y[0] + GEN[0]["h"]
+        def place_rows(vgap):
+            row_y, cur = {}, top
+            for g in range(depth, 0 if cpl else -1, -1):
+                row_y[g] = cur
+                cur += GEN[g]["h"] + vgap
+            # In couple mode the pair sits on row I; their join point hangs below it.
+            return row_y, (row_y[1] + GEN[1]["h"] + 16 if cpl else row_y[0] + GEN[0]["h"])
+        row_y, tree_bottom = place_rows(vgap)
 
         def slot(n):
             g = n.bit_length() - 1
@@ -586,6 +608,15 @@ class Renderer:
             self.H = body_top + need + 58
             self.warnings.append("descendants exceed the page; canvas was extended — print scaled or choose a larger --page")
             cols_plan = (ncol, colw, scale, self.flow(lines, ncol, colw - 22, self.H - 58 - body_top, scale))
+        if cols_plan and lines and cols_plan[2] == 1.0:
+            # Short descendant list: give the pedigree the spare height instead of leaving a void.
+            used = max(sum(l[3] for l in c) for c in cols_plan[3])
+            slack = (self.H - 58 - body_top) - used - 24
+            if slack > 30:
+                vgap += min(30.0, slack * 0.7 / (depth + 1))
+                row_y, tree_bottom = place_rows(vgap)
+                desc_top = tree_bottom + 30 + min(20.0, slack * 0.1)
+                body_top = desc_top + 30
         H = self.H
         footer_y = H - 34
 
@@ -599,16 +630,26 @@ class Renderer:
             S.append(corner(x, y, sx, sy, P["sage"]))
         # ── title ──
         f = self.f
-        title = self.title or f"The Family of {f.full}"
-        sub = self.subtitle or " · ".join(x for x in (lifespan(f, self.redact), short_place(f.birth.place, 2)) if x)
+        if cpl:
+            hu, wi = anc.get(2), anc.get(3)
+            title = self.title or f"The {(hu or wi or f).surname} Family"
+            sub = self.subtitle or " & ".join(p.full for p in (hu, wi) if p) + " · their ancestry and descendants"
+        else:
+            title = self.title or f"The Family of {f.full}"
+            sub = self.subtitle or " · ".join(x for x in (lifespan(f, self.redact), short_place(f.birth.place, 2)) if x)
         self.text(W / 2, 72, title, 30, font=FONT_DISPLAY, weight="500", style="italic")
         flo_w = min(150, tw(title, 30) * 0.42)
         S.append(flourish(W / 2, 86, flo_w, P["gold"]))
         if sub:
             self.text(W / 2, 104, sub, 8.4, caps=True, track="2.2", fill=P["ink2"])
         # side labels
-        self.text(mx + CW / 4, top - 10, "Paternal ancestry", 6.8, caps=True, track="2.4", fill=P["sage"])
-        self.text(mx + 3 * CW / 4, top - 10, "Maternal ancestry", 6.8, caps=True, track="2.4", fill=P["clay"])
+        if cpl:
+            lt = f"Family of {anc[2].full}" if 2 in anc else ""
+            rt = f"Family of {anc[3].full}" if 3 in anc else ""
+        else:
+            lt, rt = "Paternal ancestry", "Maternal ancestry"
+        self.text(mx + CW / 4, top - 10, lt, 6.8, caps=True, track="2.4", fill=P["sage"])
+        self.text(mx + 3 * CW / 4, top - 10, rt, 6.8, caps=True, track="2.4", fill=P["clay"])
         # generation numerals in the margin
         romans = ["", "I", "II", "III", "IV"]
         for g in range(1, depth + 1):
@@ -619,7 +660,7 @@ class Renderer:
         # ── connectors ──
         S.append(f'<g fill="none" stroke="{P["line"]}" stroke-width="0.7" stroke-linecap="round">')
         dots = []
-        for n in range(1, 2 ** depth):
+        for n in range(2 if cpl else 1, 2 ** depth):
             if n not in anc:
                 continue
             g, cx, w = slot(n)
@@ -639,15 +680,29 @@ class Renderer:
         for n in range(2, 2 ** (depth + 1)):
             g, cx, w = slot(n)
             if n in anc:
-                self.card(cx, row_y[g], w, GEN[g]["h"], anc[n], g, self.side_color(n))
+                self.card(cx, row_y[g], w, GEN[g]["h"], anc[n], g,
+                          P["gold"] if cpl and n < 4 else self.side_color(n), focus=bool(cpl and n < 4))
             elif n // 2 in anc:     # a known person whose parent is missing: show the gap
                 self.card(cx, row_y[g], w, GEN[g]["h"], None, g, P["faint"])
 
         # ── focus + spouses ──
         g0 = GEN[0]
         cx0 = W / 2
-        y0 = row_y[0]
-        unions = self.t.unions(f)
+        if cpl:
+            # join the couple: drops from both cards, a gold link, the marriage year
+            pb = row_y[1] + GEN[1]["h"]
+            jy = pb + 16
+            _, hx, _ = slot(2)
+            _, wx, _ = slot(3)
+            S.append(f'<path d="M{hx:.2f},{pb:.2f} V{jy - 1.4:.2f} H{wx:.2f} V{pb:.2f} M{hx:.2f},{jy + 1.4:.2f} H{wx:.2f}" '
+                     f'stroke="{P["gold"]}" stroke-width="0.6" fill="none"/>')
+            S.append(f'<circle cx="{cx0}" cy="{jy}" r="2.2" fill="{P["gold"]}"/>')
+            md = short_date(cpl.marr.date)
+            self.text(cx0, jy - 6, f"married {md}" if md else "married", 7.4, style="italic", fill=P["ink2"])
+            y0, g0 = jy, dict(h=0, w=0)
+        else:
+            y0 = row_y[0]
+        unions = [] if cpl else self.t.unions(f)
         sides = [1, -1, 1, -1]
         for k, (sp, fam, _) in enumerate(unions[:2]):
             sgn = sides[k]
@@ -661,7 +716,8 @@ class Renderer:
             self.text((x1 + x2) / 2, ly - 6, f"m. {md}" if md else "m.", 7.2, style="italic", fill=P["ink2"])
             if sp:
                 self.card(scx, sy, sw, sh, sp, 2, P["gold"])
-        self.card(cx0, y0, g0["w"], g0["h"], f, 0, P["gold"], focus=True)
+        if not cpl:
+            self.card(cx0, y0, g0["w"], g0["h"], f, 0, P["gold"], focus=True)
 
         # ── descendants ──
         if self.down > 0:
@@ -711,7 +767,13 @@ class Renderer:
         if self.down == 0:
             return []
         blocks = []
-        unions = self.t.unions(self.f)
+        if self.couple:
+            fam = self.couple
+            kids = sorted((self.t.people[c] for c in fam.children if c in self.t.people),
+                          key=lambda c: year(c.birth.date) or 9999)
+            unions = [(None, fam, kids)]
+        else:
+            unions = self.t.unions(self.f)
         multi = sum(1 for u in unions if u[2]) > 1
 
         def person_segs(p: Person, spouse_of: Person | None = None):
@@ -864,7 +926,7 @@ def audit(tree: Tree, focus: Person, anc: dict[int, Person], up: int, down: int)
     """Sanity checks on the extracted relationships — flags likely data errors."""
     issues = []
     for n, p in anc.items():
-        if n == 1:
+        if n == 1 or n // 2 not in anc:
             continue
         child = anc[n // 2]
         cy, py = year(child.birth.date), year(p.birth.date)
@@ -948,6 +1010,8 @@ def main(argv=None):
     ap.add_argument("--title")
     ap.add_argument("--subtitle")
     ap.add_argument("--note", help="replace the footer line")
+    ap.add_argument("--couple", action="store_true",
+                    help="centre on the focus person and their first spouse as a pair (both family lines above)")
     ap.add_argument("--no-ids", action="store_true", help="hide FamilySearch IDs")
     ap.add_argument("--redact-living", action="store_true", help="show 'Living' instead of dates for living people")
     ap.add_argument("--no-background", action="store_true", help="white paper (saves ink)")
@@ -958,13 +1022,21 @@ def main(argv=None):
 
     tree = Tree.from_json(a.source) if a.source.suffix.lower() == ".json" else Tree.from_gedcom(a.source)
     focus = tree.find(a.focus)
+    couple = None
+    if a.couple:
+        couple = next((fam for sp, fam, _ in tree.unions(focus) if sp), None)
+        if couple is None:
+            sys.exit("error: --couple needs the focus person to have a spouse")
     r = Renderer(tree, focus, a.up, a.down, a.page, a.title, a.subtitle,
-                 not a.no_ids, a.redact_living, not a.no_background, a.note)
+                 not a.no_ids, a.redact_living, not a.no_background, a.note, couple)
     svg = r.render()
     a.out.write_text(svg, encoding="utf-8")
-    anc = tree.ahnentafel(focus, r.up)
-    known = len(anc) - 1
-    slots = 2 ** (r.up + 1) - 2
+    if couple:
+        anc = tree.ahnentafel_family(couple, r.up)
+        known, slots = len(anc), 2 ** (r.up + 1) - 2
+    else:
+        anc = tree.ahnentafel(focus, r.up)
+        known, slots = len(anc) - 1, 2 ** (r.up + 1) - 2
     print(f"focus: {focus.full} {lifespan(focus)} [{focus.fsid or focus.id}]")
     print(f"ancestors found: {known}/{slots} positions · wrote {a.out}")
     for w in r.warnings:
