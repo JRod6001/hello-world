@@ -433,6 +433,161 @@ def flourish(cx, cy, half, color) -> str:
             f'</g>')
 
 
+# ───────────────────────────── themes ──────────────────────────────────
+
+THEMES = {
+    "classic": dict(palette=dict(PALETTE), border="fine", tree_art=0.0, card="rounded", glyphs=False, sprigs=True),
+    "woodcut": dict(palette={"paper": "#F4ECDA", "card": "#FBF6EA", "ink": "#2A2016", "ink2": "#584734",
+                             "faint": "#9A8970", "gold": "#7C5D31", "sage": "#4E6240", "clay": "#874C35",
+                             "line": "#6C5843"},
+                    border="woodcut", tree_art=0.12, card="woodcut", glyphs=True, sprigs=False),
+    "heirloom": dict(palette={"paper": "#FAF6EE", "card": "#FFFDF8", "ink": "#1E2622", "ink2": "#4B554F",
+                              "faint": "#959D97", "gold": "#A3813D", "sage": "#2E5A4D", "clay": "#7A2C3A",
+                              "line": "#7D837E"},
+                     border="ornate", tree_art=0.055, card="cartouche", glyphs=True, sprigs=False),
+}
+
+
+def leaf_filled(x, y, ang, length, width, ink, paper) -> str:
+    ca, sa = math.cos(ang), math.sin(ang)
+    def P(u, v):
+        return f"{x + u * ca - v * sa:.2f},{y + u * sa + v * ca:.2f}"
+    L, W = length, width
+    return (f'<path d="M{P(0,0)} Q{P(L*0.45, W)} {P(L,0)} Q{P(L*0.45,-W)} {P(0,0)}Z" fill="{ink}"/>'
+            f'<path d="M{P(L*0.1,0)} L{P(L*0.8,0)}" stroke="{paper}" stroke-width="{max(0.3, W*0.18):.2f}" fill="none"/>')
+
+
+def woodcut_tree(cx, base_y, top_y, half_w, ink, paper, opacity, seed=11) -> str:
+    """A procedurally carved oak: tapered solid limbs with paper-coloured gouge lines,
+    leaf clusters at the tips, spreading roots and a hatched ground line."""
+    import random
+    rng = random.Random(seed)
+    out = []
+
+    def tapered(x0, y0, x1, y1, w0, w1, bend, carve=0):
+        dx, dy = x1 - x0, y1 - y0
+        L = math.hypot(dx, dy) or 1
+        nx, ny = -dy / L, dx / L
+        mx_, my_ = (x0 + x1) / 2 + nx * bend, (y0 + y1) / 2 + ny * bend
+        wm = (w0 + w1) / 4
+        out.append(
+            f'<path d="M{x0 + nx*w0/2:.1f},{y0 + ny*w0/2:.1f} Q{mx_ + nx*wm:.1f},{my_ + ny*wm:.1f} {x1 + nx*w1/2:.1f},{y1 + ny*w1/2:.1f} '
+            f'L{x1 - nx*w1/2:.1f},{y1 - ny*w1/2:.1f} Q{mx_ - nx*wm:.1f},{my_ - ny*wm:.1f} {x0 - nx*w0/2:.1f},{y0 - ny*w0/2:.1f}Z" fill="{ink}"/>')
+        for k in range(carve):  # gouge lines along the grain
+            o = (k + 1) / (carve + 1) - 0.5
+            sw = max(0.35, w0 * 0.055)
+            out.append(f'<path d="M{x0 + nx*w0*o*0.8 + dx*0.06:.1f},{y0 + ny*w0*o*0.8 + dy*0.06:.1f} '
+                       f'Q{mx_ + nx*wm*o*1.6:.1f},{my_ + ny*wm*o*1.6:.1f} {x1 + nx*w1*o*0.6 - dx*0.1:.1f},{y1 + ny*w1*o*0.6 - dy*0.1:.1f}" '
+                       f'stroke="{paper}" stroke-width="{sw:.2f}" fill="none" stroke-linecap="round"/>')
+
+    def branch(x, y, ang, length, width, depth):
+        x1, y1 = x + math.cos(ang) * length, y - math.sin(ang) * length
+        tapered(x, y, x1, y1, width, width * 0.66, rng.uniform(-0.1, 0.1) * length,
+                carve=3 if width > 14 else 2 if width > 6 else 1 if width > 3 else 0)
+        if depth == 0 or width < 1.4:
+            for _ in range(rng.randint(4, 7)):
+                a = ang + rng.uniform(-1.4, 1.4)
+                d = rng.uniform(0, 8)
+                out.append(leaf_filled(x1 + math.cos(a) * d, y1 - math.sin(a) * d, -a + rng.uniform(-0.4, 0.4),
+                                       rng.uniform(7, 12), rng.uniform(2.2, 3.4), ink, paper))
+            return
+        nb = 3 if rng.random() < 0.25 else 2
+        spread = rng.uniform(0.32, 0.55)
+        for i in range(nb):
+            t = (i - (nb - 1) / 2) / ((nb - 1) / 2)
+            a = ang + spread * t + rng.uniform(-0.12, 0.12)
+            a = min(math.pi - 0.08, max(0.08, a))      # keep limbs above horizontal
+            branch(x1, y1, a, length * rng.uniform(0.7, 0.82), width * rng.uniform(0.6, 0.7), depth - 1)
+
+    fork_y = top_y + (base_y - top_y) * 0.55
+    trunk_w = half_w * 0.075
+    tapered(cx, base_y, cx, fork_y, trunk_w, trunk_w * 0.8, 0, carve=6)
+    for k in range(18):  # bark ticks
+        yy = fork_y + (base_y - fork_y) * rng.random()
+        xx = cx + trunk_w * rng.uniform(-0.38, 0.38)
+        out.append(f'<path d="M{xx:.1f},{yy:.1f} q{rng.uniform(2,5):.1f},{rng.uniform(-1,1):.1f} {rng.uniform(4,9):.1f},0" '
+                   f'stroke="{paper}" stroke-width="0.6" fill="none"/>')
+    reach = (fork_y - top_y)
+    for a in (2.75, 2.25, 1.75, 1.39, 0.89, 0.39):
+        h = max(0.25, math.sin(a))
+        branch(cx + (a - 1.57) * trunk_w * 0.25, fork_y, a, reach * 0.36 / h ** 0.35 * (half_w / reach) ** 0.5 * 0.9,
+               trunk_w * 0.42, 6)
+    for a in (-0.15, -0.55, -1.2, -1.95, -2.6, -3.0):  # roots
+        L = trunk_w * rng.uniform(1.4, 2.4)
+        tapered(cx + math.cos(a) * trunk_w * 0.2, base_y, cx + math.cos(a) * L * 1.6, base_y - math.sin(a) * L * 0.35,
+                trunk_w * 0.32, 1.2, rng.uniform(-4, 4), carve=1)
+    for k in range(60):  # ground hatching
+        xx = cx + rng.uniform(-half_w * 0.35, half_w * 0.35)
+        yy = base_y + rng.uniform(-2, 6)
+        out.append(f'<path d="M{xx:.1f},{yy:.1f} l{rng.uniform(3,7):.1f},{rng.uniform(-0.6,0.6):.1f}" stroke="{ink}" stroke-width="0.8"/>')
+    return f'<g opacity="{opacity}">{"".join(out)}</g>'
+
+
+def glyph(kind, x, y, s, color) -> str:
+    """Small drawn event marks: b = six-ray star, d = dagger, m = interlocked rings."""
+    if kind == "b":
+        r = s * 0.34
+        rays = "".join(f"M{x:.2f},{y:.2f} L{x + r * math.cos(a):.2f},{y + r * math.sin(a):.2f} "
+                       for a in [k * math.pi / 3 + math.pi / 6 for k in range(6)])
+        return f'<path d="{rays}" stroke="{color}" stroke-width="{s * 0.09:.2f}" stroke-linecap="round"/>'
+    if kind == "d":
+        h = s * 0.4
+        return (f'<path d="M{x:.2f},{y - h:.2f} V{y + h:.2f} M{x - h * 0.5:.2f},{y - h * 0.35:.2f} H{x + h * 0.5:.2f}" '
+                f'stroke="{color}" stroke-width="{s * 0.09:.2f}" stroke-linecap="round"/>')
+    if kind == "m":
+        r = s * 0.3
+        return (f'<g fill="none" stroke="{color}" stroke-width="{s * 0.08:.2f}"><circle cx="{x - r * 0.55:.2f}" cy="{y:.2f}" r="{r:.2f}"/>'
+                f'<circle cx="{x + r * 0.55:.2f}" cy="{y:.2f}" r="{r:.2f}"/></g>')
+    return ""
+
+
+def border(kind, W, H, P) -> str:
+    out = []
+    if kind == "fine":
+        out.append(f'<rect x="18" y="18" width="{W - 36}" height="{H - 36:.2f}" fill="none" stroke="{P["gold"]}" stroke-width="1.1"/>')
+        out.append(f'<rect x="23.5" y="23.5" width="{W - 47}" height="{H - 47:.2f}" fill="none" stroke="{P["gold"]}" stroke-width="0.4"/>')
+    elif kind == "woodcut":
+        ink = P["ink"]
+        out.append(f'<rect x="15" y="15" width="{W - 30}" height="{H - 30:.2f}" fill="none" stroke="{ink}" stroke-width="6"/>')
+        out.append(f'<rect x="26.5" y="26.5" width="{W - 53}" height="{H - 53:.2f}" fill="none" stroke="{ink}" stroke-width="1.3"/>')
+        hatch = []
+        for x in range(26, int(W - 26), 5):  # diagonal gouge band between the rules
+            hatch.append(f"M{x},19 l4,6 M{x},{H - 19:.1f} l4,-6")
+        for y in range(26, int(H - 26), 5):
+            hatch.append(f"M19,{y} l6,4 M{W - 19},{y} l-6,4")
+        out.append(f'<path d="{" ".join(hatch)}" stroke="{ink}" stroke-width="0.9" opacity="0.75"/>')
+        for (x, y) in ((12, 12), (W - 36, 12), (12, H - 36), (W - 36, H - 36)):
+            out.append(f'<rect x="{x}" y="{y:.1f}" width="24" height="24" fill="{ink}"/>')
+            c = (x + 12, y + 12)
+            for a in range(4):
+                out.append(leaf_filled(c[0], c[1], a * math.pi / 2 + math.pi / 4, 9, 3.2, P["paper"], ink))
+    elif kind == "ornate":
+        g, sage = P["gold"], P["sage"]
+        out.append(f'<rect x="15" y="15" width="{W - 30}" height="{H - 30:.2f}" fill="none" stroke="{g}" stroke-width="3.2"/>')
+        out.append(f'<rect x="20.5" y="20.5" width="{W - 41}" height="{H - 41:.2f}" fill="none" stroke="{g}" stroke-width="0.7"/>')
+        out.append(f'<rect x="33.5" y="33.5" width="{W - 67}" height="{H - 67:.2f}" fill="none" stroke="{g}" stroke-width="0.7"/>')
+        vine = []
+        def run(x0, y0, x1, y1):
+            L = math.hypot(x1 - x0, y1 - y0)
+            ux, uy = (x1 - x0) / L, (y1 - y0) / L
+            n = int(L // 15)
+            a0 = math.atan2(uy, ux)
+            vine.append(f'<path d="M{x0:.1f},{y0:.1f} L{x1:.1f},{y1:.1f}" stroke="{sage}" stroke-width="0.45"/>')
+            for i in range(1, n):
+                px, py = x0 + ux * i * 15, y0 + uy * i * 15
+                side = 1 if i % 2 else -1
+                vine.append(leaf(px, py, a0 + side * 0.7, 6.5, 2.1))
+        run(52, 27, W - 52, 27); run(52, H - 27, W - 52, H - 27)
+        run(27, 52, 27, H - 52); run(W - 27, 52, W - 27, H - 52)
+        out.append(f'<g fill="none" stroke="{sage}" stroke-width="0.5">{"".join(vine)}</g>')
+        for (x, y) in ((27, 27), (W - 27, 27), (27, H - 27), (W - 27, H - 27)):
+            out.append(f'<circle cx="{x}" cy="{y:.1f}" r="13" fill="{P["paper"]}" stroke="{g}" stroke-width="0.8"/>')
+            petals = "".join(leaf(x, y, a * math.pi / 4, 10 if a % 2 == 0 else 7, 3) for a in range(8))
+            out.append(f'<g fill="none" stroke="{g}" stroke-width="0.6">{petals}</g>'
+                       f'<circle cx="{x}" cy="{y:.1f}" r="2" fill="{g}"/>')
+    return "".join(out)
+
+
 # ───────────────────────────── renderer ────────────────────────────────
 
 PAGES = {  # name: (width_pt, height_pt) landscape
@@ -454,7 +609,8 @@ GEN = {
 class Renderer:
     def __init__(self, tree: Tree, focus: Person, up=4, down=3, page="tabloid",
                  title=None, subtitle=None, show_ids=True, redact_living=False,
-                 background=True, note=None, couple: Family | None = None):
+                 background=True, note=None, couple: Family | None = None,
+                 style="classic", desc_layout="tree", tree_art=None):
         self.t, self.f = tree, focus
         self.up, self.down = max(1, min(4, up)), max(0, min(3, down))
         pw, ph = PAGES[page]
@@ -465,6 +621,11 @@ class Renderer:
         self.ids, self.redact, self.bg, self.note = show_ids, redact_living, background, note
         self.svg: list[str] = []
         self.couple = couple
+        self.theme = dict(THEMES[style])
+        if tree_art is not None:
+            self.theme["tree_art"] = tree_art
+        PALETTE.clear(); PALETTE.update(self.theme["palette"])
+        self.desc_layout = desc_layout
         self.warnings: list[str] = []
 
     # ── helpers ──
@@ -496,13 +657,7 @@ class Renderer:
             self.text(cx, y + h / 2 + 3, "not yet identified" if gen <= 3 else "unknown",
                       7.2 if gen <= 3 else 6.4, style="italic", fill=PALETTE["faint"])
             return
-        S.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" rx="3.5" '
-                 f'fill="{PALETTE["card"]}" stroke="{color}" stroke-width="{1.0 if focus else 0.7}"/>')
-        if focus:
-            S.append(f'<rect x="{x + 3:.2f}" y="{y + 3:.2f}" width="{w - 6:.2f}" height="{h - 6:.2f}" rx="2" '
-                     f'fill="none" stroke="{color}" stroke-width="0.4"/>')
-        else:  # small accent tick on the top edge
-            S.append(f'<path d="M{cx - 9:.2f},{y:.2f} H{cx + 9:.2f}" stroke="{color}" stroke-width="2"/>')
+        self.card_shape(x, y, w, h, color, focus)
         pad = 7 if gen >= 3 else 10
         iw = w - 2 * pad
         ls = lifespan(p, self.redact)
@@ -536,6 +691,10 @@ class Renderer:
                 lines.append((ls, sizes["l1"], dict(style="italic", fill=PALETTE["ink2"])))
         elif ls:
             lines.append((fit_text(ls, iw, sizes["l1"]), sizes["l1"], dict(fill=PALETTE["ink2"])))
+        if self.theme["glyphs"]:
+            lines = lines[:2]
+            for run in self.date_items(p, gen <= 2):
+                lines.append(("", sizes["l1"], dict(_items=run, fill=PALETTE["ink2"])))
         if self.ids and p.fsid:
             lines.append((p.fsid, sizes["id"], dict(fill=PALETTE["faint"], track="0.6")))
         # vertical layout: distribute baselines inside the card
@@ -550,7 +709,79 @@ class Renderer:
         yy = y + (h - total) / 2
         for (s, size, kw), lh in zip(lines, heights):
             yy += lh
-            self.text(cx, yy - lh * 0.24, s, size, **kw)
+            if "_items" in kw:
+                self.glyph_line(cx, yy - lh * 0.24, kw["_items"], size, kw.get("fill"))
+            else:
+                self.text(cx, yy - lh * 0.24, s, size, **kw)
+
+    def card_shape(self, x, y, w, h, color, focus):
+        S, P, kind = self.svg, PALETTE, self.theme["card"]
+        cx = x + w / 2
+        def cart(x, y, w, h, r):
+            return (f"M{x + r:.2f},{y:.2f} H{x + w - r:.2f} A{r},{r} 0 0 0 {x + w:.2f},{y + r:.2f} V{y + h - r:.2f} "
+                    f"A{r},{r} 0 0 0 {x + w - r:.2f},{y + h:.2f} H{x + r:.2f} A{r},{r} 0 0 0 {x:.2f},{y + h - r:.2f} "
+                    f"V{y + r:.2f} A{r},{r} 0 0 0 {x + r:.2f},{y:.2f}Z")
+        if kind == "cartouche":
+            r = min(7.0, h * 0.14)
+            S.append(f'<path d="{cart(x, y, w, h, r)}" fill="{P["card"]}" stroke="{color}" stroke-width="{1.1 if focus else 0.8}"/>')
+            S.append(f'<path d="{cart(x + 3, y + 3, w - 6, h - 6, max(2, r - 2))}" fill="none" stroke="{color}" stroke-width="0.35"/>')
+            S.append(f'<path d="M{cx:.2f},{y - 3.4:.2f} l3.4,3.4 l-3.4,3.4 l-3.4,-3.4Z" fill="{color}"/>')
+            if focus:
+                S.append(f'<path d="{cart(x - 3, y - 3, w + 6, h + 6, r + 2)}" fill="none" stroke="{color}" stroke-width="0.5"/>')
+        elif kind == "woodcut":
+            S.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" fill="{P["card"]}" '
+                     f'stroke="{P["ink"]}" stroke-width="{1.6 if focus else 1.0}"/>')
+            S.append(f'<rect x="{x + 2.5:.2f}" y="{y + 2.5:.2f}" width="{w - 5:.2f}" height="{h - 5:.2f}" fill="none" '
+                     f'stroke="{color}" stroke-width="0.5"/>')
+            S.append(f'<rect x="{cx - 8:.2f}" y="{y - 3:.2f}" width="16" height="6" fill="{P["ink"]}"/>'
+                     + leaf_filled(cx, y, 0, 6, 1.8, P["paper"], P["ink"]) + leaf_filled(cx, y, math.pi, 6, 1.8, P["paper"], P["ink"]))
+        else:
+            S.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" rx="3.5" '
+                     f'fill="{P["card"]}" stroke="{color}" stroke-width="{1.0 if focus else 0.7}"/>')
+            if focus:
+                S.append(f'<rect x="{x + 3:.2f}" y="{y + 3:.2f}" width="{w - 6:.2f}" height="{h - 6:.2f}" rx="2" '
+                         f'fill="none" stroke="{color}" stroke-width="0.4"/>')
+            else:
+                S.append(f'<path d="M{cx - 9:.2f},{y:.2f} H{cx + 9:.2f}" stroke="{color}" stroke-width="2"/>')
+
+    def glyph_line(self, cx, y, items, size, fill, style=None):
+        """Centre a run of (glyph, text) items, e.g. [('b','1886'), ('d','1952')]."""
+        gw, gap, sep = size * 0.7, size * 0.28, size * 0.95
+        parts = []
+        for k, (g, t) in enumerate(items):
+            parts.append((g, t, (gw + (gap if t else 0) if g else 0) + tw(t, size)))
+        total = sum(p[2] for p in parts) + sep * (len(parts) - 1)
+        x = cx - total / 2
+        for g, t, wdt in parts:
+            if g:
+                self.svg.append(glyph(g, x + gw / 2, y - size * 0.32, size, PALETTE["gold"]))
+                x += gw + (gap if t else 0)
+            if t:
+                self.text(x, y, t, size, anchor="start", fill=fill, style=style)
+            x += tw(t, size) + sep
+
+    def date_items(self, p: Person, with_places: bool):
+        """Event runs for glyph mode: one or two lines of (glyph, text)."""
+        if self.redact and is_living(p):
+            return [[(None, "Living")]]
+        b, d = short_date(p.birth.date), short_date(p.death.date)
+        if with_places and (p.birth.place or p.death.place):
+            lines = []
+            if b or p.birth.place:
+                lines.append([("b", " · ".join(x for x in (b, short_place(p.birth.place)) if x))])
+            if d or p.death.place:
+                lines.append([("d", " · ".join(x for x in (d, short_place(p.death.place)) if x))])
+            return lines
+        run = []
+        if b:
+            run.append(("b", b))
+        if d:
+            run.append(("d", d))
+        elif is_living(p):
+            run.append((None, "Living"))
+        elif p.living is False or b:
+            run.append(("d", ""))
+        return [run] if run else []
 
     # ── main ──
     def render(self) -> str:
@@ -588,7 +819,10 @@ class Renderer:
         desc_top = tree_bottom + 30
         body_top = desc_top + 30
         footer_y = None
-        lines = self.descendant_lines()
+        tplan = None
+        if self.down > 0 and self.desc_layout == "tree":
+            tplan = self.desc_tree_plan(self.desc_roots(), CW)
+        lines = [] if tplan else self.descendant_lines()
         cols_plan = None
         for scale in (1.0, 0.92, 0.85, 0.78):
             avail = self.H - 58 - body_top
@@ -617,17 +851,34 @@ class Renderer:
                 row_y, tree_bottom = place_rows(vgap)
                 desc_top = tree_bottom + 30 + min(20.0, slack * 0.1)
                 body_top = desc_top + 30
+        if tplan:
+            avail = self.H - 54 - tree_bottom
+            need = tplan["height"] + 8
+            rows = depth + (0 if cpl else 1)
+            if need > avail:
+                vgap = max(12.0, vgap - (need - avail) / rows)
+                row_y, tree_bottom = place_rows(vgap)
+                if need > self.H - 54 - tree_bottom:
+                    self.H = tree_bottom + need + 54
+                    self.warnings.append("descendant tree exceeds the page; canvas was extended")
+            else:
+                vgap += min(30.0, (avail - need) * 0.75 / rows)
+                row_y, tree_bottom = place_rows(vgap)
         H = self.H
-        footer_y = H - 34
+        footer_y = H - (34 if self.theme["border"] == "fine" else 44)
 
         S = self.svg
         # ── page & border ──
         if self.bg:
             S.append(f'<rect x="0" y="0" width="{W}" height="{H:.2f}" fill="{P["paper"]}"/>')
-        S.append(f'<rect x="18" y="18" width="{W - 36}" height="{H - 36:.2f}" fill="none" stroke="{P["gold"]}" stroke-width="1.1"/>')
-        S.append(f'<rect x="23.5" y="23.5" width="{W - 47}" height="{H - 47:.2f}" fill="none" stroke="{P["gold"]}" stroke-width="0.4"/>')
-        for (x, y, sx, sy) in ((30, 30, 1, 1), (W - 30, 30, -1, 1), (30, H - 30, 1, -1), (W - 30, H - 30, -1, -1)):
-            S.append(corner(x, y, sx, sy, P["sage"]))
+        if self.theme["tree_art"]:
+            S.append(f'<defs><clipPath id="ft-inner"><rect x="36" y="36" width="{W - 72}" height="{H - 72:.2f}"/></clipPath></defs>'
+                     f'<g clip-path="url(#ft-inner)">'
+                     + woodcut_tree(W / 2, H - 62, top - 6, CW / 2, P["ink"], P["paper"], self.theme["tree_art"]) + '</g>')
+        S.append(border(self.theme["border"], W, H, P))
+        if self.theme["sprigs"]:
+            for (x, y, sx, sy) in ((30, 30, 1, 1), (W - 30, 30, -1, 1), (30, H - 30, 1, -1), (W - 30, H - 30, -1, -1)):
+                S.append(corner(x, y, sx, sy, P["sage"]))
         # ── title ──
         f = self.f
         if cpl:
@@ -698,7 +949,12 @@ class Renderer:
                      f'stroke="{P["gold"]}" stroke-width="0.6" fill="none"/>')
             S.append(f'<circle cx="{cx0}" cy="{jy}" r="2.2" fill="{P["gold"]}"/>')
             md = short_date(cpl.marr.date)
-            self.text(cx0, jy - 6, f"married {md}" if md else "married", 7.4, style="italic", fill=P["ink2"])
+            if self.theme["glyphs"]:
+                S.append(f'<circle cx="{cx0}" cy="{jy - 11}" r="8" fill="{P["paper"]}"/>' + glyph("m", cx0, jy - 11, 13, P["gold"]))
+                if md:
+                    self.text(cx0 + 14, jy - 7, md, 7.4, anchor="start", style="italic", fill=P["ink2"])
+            else:
+                self.text(cx0, jy - 6, f"married {md}" if md else "married", 7.4, style="italic", fill=P["ink2"])
             y0, g0 = jy, dict(h=0, w=0)
         else:
             y0 = row_y[0]
@@ -720,7 +976,9 @@ class Renderer:
             self.card(cx0, y0, g0["w"], g0["h"], f, 0, P["gold"], focus=True)
 
         # ── descendants ──
-        if self.down > 0:
+        if tplan:
+            self.draw_desc_tree(tplan, cx0, y0 + g0["h"], tree_bottom)
+        elif self.down > 0:
             S.append(f'<path d="M{cx0},{y0 + g0["h"]:.2f} V{desc_top - 9:.2f}" stroke="{P["line"]}" stroke-width="0.7"/>')
             # divider ornament with heading
             label = "Descendants"
@@ -764,6 +1022,107 @@ class Renderer:
                 f'<title>{esc(title)}</title>'
                 f'<style>@import url("{FONTS_URL.replace("&", "&amp;")}");</style>')
         return head + "".join(S) + "</svg>"
+
+    # ── descendants as a connected tree ──
+    DS = {1: (150.0, 64.0), 2: (134.0, 58.0), 3: (118.0, 52.0)}
+    SG, HG, VG = 26.0, 18.0, 28.0      # spouse gap, sibling gap, row gap
+
+    def desc_roots(self):
+        def build(p, lvl):
+            us = self.t.unions(p)
+            sp = next((u[0] for u in us if u[0]), None)
+            kids = [k for u in us for k in u[2]]
+            return dict(p=p, sp=sp, lvl=lvl,
+                        kids=[build(k, lvl + 1) for k in kids] if lvl < self.down else [])
+        if self.couple:
+            fam = self.couple
+            kids = sorted((self.t.people[c] for c in fam.children if c in self.t.people),
+                          key=lambda c: year(c.birth.date) or 9999)
+        else:
+            kids = [k for u in self.t.unions(self.f) for k in u[2]]
+        return [build(k, 1) for k in kids]
+
+    def desc_tree_plan(self, roots, CW):
+        if not roots:
+            return None
+        def sub(n, sc):
+            w = self.DS[n["lvl"]][0] * sc
+            n["w"], n["h"] = w, self.DS[n["lvl"]][1]
+            n["uw"] = w + (self.SG + w if n["sp"] else 0)
+            span = sum(sub(k, sc) for k in n["kids"]) + self.HG * max(0, len(n["kids"]) - 1)
+            n["sub"] = max(n["uw"], span)
+            n["span"] = span
+            return n["sub"]
+        for sc in (1.0, 0.9, 0.8, 0.7, 0.62):
+            total = sum(sub(r, sc) for r in roots) + self.HG * (len(roots) - 1)
+            if total <= CW:
+                break
+        else:
+            return None
+        def levels(n):
+            return max([n["lvl"]] + [levels(k) for k in n["kids"]])
+        nl = max(levels(r) for r in roots)
+        height = 26 + sum(self.DS[l][1] for l in range(1, nl + 1)) + self.VG * (nl - 1)
+        return dict(roots=roots, total=total, levels=nl, height=height)
+
+    def draw_desc_tree(self, plan, ax, ay, top):
+        P, S = PALETTE, self.svg
+        ytop = {1: top + 26}
+        for l in range(2, plan["levels"] + 1):
+            ytop[l] = ytop[l - 1] + self.DS[l - 1][1] + self.VG
+
+        def place(n, left):
+            if n["kids"]:
+                cl = left + (n["sub"] - n["span"]) / 2
+                for k in n["kids"]:
+                    place(k, cl)
+                    cl += k["sub"] + self.HG
+                centre = left + (n["sub"] - n["span"]) / 2 + n["span"] / 2
+            else:
+                centre = left + n["sub"] / 2
+            off = n["w"] + self.SG / 2 if n["sp"] else n["w"] / 2
+            ux = min(max(centre - off, left), left + n["sub"] - n["uw"])
+            n["x"], n["anchor"] = ux, ux + off
+
+        left = self.W / 2 - plan["total"] / 2
+        for r in plan["roots"]:
+            place(r, left)
+            left += r["sub"] + self.HG
+
+        def drop(kids, ax, ay, lvl):
+            if not kids:
+                return
+            mid = ytop[lvl] - (13 if lvl == 1 else self.VG / 2)
+            xs = [k["x"] + k["w"] / 2 for k in kids]
+            d = f"M{ax:.2f},{ay:.2f} V{mid:.2f} M{min(xs + [ax]):.2f},{mid:.2f} H{max(xs + [ax]):.2f} "
+            d += " ".join(f"M{x:.2f},{mid:.2f} V{ytop[lvl]:.2f}" for x in xs)
+            S.append(f'<path d="{d}" fill="none" stroke="{P["line"]}" stroke-width="0.7" stroke-linecap="round"/>')
+            S.append(f'<circle cx="{ax:.2f}" cy="{mid:.2f}" r="1.5" fill="{P["gold"]}"/>')
+
+        def draw(n):
+            l, w, h = n["lvl"], n["w"], n["h"]
+            y = ytop[l]
+            gen = 3 if l <= 2 else 4
+            if n["sp"]:
+                x1, x2, ly = n["x"] + w, n["x"] + w + self.SG, y + h / 2
+                S.append(f'<path d="M{x1:.2f},{ly - 1.3:.2f} H{x2:.2f} M{x1:.2f},{ly + 1.3:.2f} H{x2:.2f}" stroke="{P["gold"]}" stroke-width="0.6"/>')
+                if self.theme["glyphs"]:
+                    S.append(glyph("m", (x1 + x2) / 2, ly - 7, 9, P["gold"]))
+                else:
+                    self.text((x1 + x2) / 2, ly - 4, "m.", 6.6, style="italic", fill=P["ink2"])
+                self.card(n["x"] + w + self.SG + w / 2, y, w, h, n["sp"], gen, P["line"])
+            self.card(n["x"] + w / 2, y, w, h, n["p"], gen, P["gold"])
+            if n["kids"]:
+                if n["sp"]:
+                    drop(n["kids"], n["anchor"], y + h / 2 + 1.3, l + 1)
+                else:
+                    drop(n["kids"], n["anchor"], y + h, l + 1)
+                for k in n["kids"]:
+                    draw(k)
+
+        drop(plan["roots"], ax, ay, 1)
+        for r in plan["roots"]:
+            draw(r)
 
     # ── descendants outline ──
     def descendant_lines(self):
@@ -1016,6 +1375,10 @@ def main(argv=None):
     ap.add_argument("--note", help="replace the footer line")
     ap.add_argument("--couple", action="store_true",
                     help="centre on the focus person and their first spouse as a pair (both family lines above)")
+    ap.add_argument("--style", default="classic", choices=sorted(THEMES), help="visual theme")
+    ap.add_argument("--descendants", default="tree", choices=["tree", "list"],
+                    help="draw descendants as connected cards (tree) or an indented outline (list)")
+    ap.add_argument("--tree-art", type=float, help="opacity of the background woodcut tree (0 to hide)")
     ap.add_argument("--no-ids", action="store_true", help="hide FamilySearch IDs")
     ap.add_argument("--redact-living", action="store_true", help="show 'Living' instead of dates for living people")
     ap.add_argument("--no-background", action="store_true", help="white paper (saves ink)")
@@ -1032,7 +1395,8 @@ def main(argv=None):
         if couple is None:
             sys.exit("error: --couple needs the focus person to have a spouse")
     r = Renderer(tree, focus, a.up, a.down, a.page, a.title, a.subtitle,
-                 not a.no_ids, a.redact_living, not a.no_background, a.note, couple)
+                 not a.no_ids, a.redact_living, not a.no_background, a.note, couple,
+                 a.style, a.descendants, a.tree_art)
     svg = r.render()
     a.out.write_text(svg, encoding="utf-8")
     if couple:

@@ -30,6 +30,10 @@ python3 familytree.py tree.ged --focus KWZ1-ABC -o tree.svg --pdf tree.pdf
 | `--page` | tabloid | `tabloid`, `a3`, `a2`, `18x24`, `24x36`, `letter`, `a4` (landscape) |
 | `--title`, `--subtitle`, `--note` | auto | heading and footer text |
 | `--redact-living` | off | shows "Living" in place of dates for living people |
+| `--couple` | off | centres the chart on the focus person and their spouse together |
+| `--style` | classic | `classic`, `woodcut` (background tree, carved border) or `heirloom` (ornate border, shaped cards) |
+| `--descendants` | tree | `tree` draws descendants as connected cards; `list` uses an indented outline |
+| `--tree-art` | per style | opacity of the background woodcut tree, `0` hides it |
 | `--no-ids` | off | hides FamilySearch IDs |
 | `--no-background` | off | white paper, to save ink |
 
