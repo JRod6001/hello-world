@@ -372,7 +372,8 @@ PALETTE = {
 FONT_DISPLAY = "'Cormorant Garamond', 'Cormorant', 'EB Garamond', Garamond, Georgia, 'Times New Roman', serif"
 FONT_TEXT = "'EB Garamond', Garamond, Georgia, 'Times New Roman', serif"
 FONTS_URL = ("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500"
-             "&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap")
+             "&family=EB+Garamond:ital,wght@0,400;0,500;1,400"
+             "&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Pinyon+Script&display=swap")
 
 
 # ───────────────────────────── ornaments ───────────────────────────────
@@ -445,7 +446,73 @@ THEMES = {
                               "faint": "#959D97", "gold": "#A3813D", "sage": "#2E5A4D", "clay": "#7A2C3A",
                               "line": "#7D837E"},
                      border="ornate", tree_art=0.055, card="cartouche", glyphs=True, sprigs=False),
+    "victorian": dict(palette={"paper": "#EDE0C2", "card": "#F5ECD6", "ink": "#3A2918", "ink2": "#5B442D",
+                               "faint": "#977F5E", "gold": "#8A6630", "sage": "#4B5A38", "clay": "#7C3324",
+                               "line": "#5D4831"},
+                      border="engraved", tree_art=0.10, card="cartouche", glyphs=True, sprigs=False,
+                      aged=True, banner=True,
+                      fonts=("'IM Fell English', 'EB Garamond', Georgia, serif",
+                             "'IM Fell English', 'EB Garamond', Georgia, serif"),
+                      title_font="'Pinyon Script', 'IM Fell English', cursive"),
 }
+
+
+def hypotrochoid(cx, cy, R, r, d, scale, turns) -> str:
+    pts = []
+    n = int(turns * 90)
+    for i in range(n + 1):
+        t = turns * 2 * math.pi * i / n
+        x = (R - r) * math.cos(t) + d * math.cos((R - r) / r * t)
+        y = (R - r) * math.sin(t) - d * math.sin((R - r) / r * t)
+        pts.append(f"{cx + x * scale:.2f},{cy + y * scale:.2f}")
+    return "M" + " L".join(pts)
+
+
+def guilloche_band(x0, y0, x1, y1, amp, wl, strands=3) -> str:
+    L = math.hypot(x1 - x0, y1 - y0)
+    ux, uy = (x1 - x0) / L, (y1 - y0) / L
+    nx, ny = -uy, ux
+    out = []
+    for k in range(strands):
+        ph = 2 * math.pi * k / strands
+        pts = []
+        for i in range(int(L / 1.5) + 1):
+            t = i * 1.5
+            o = amp * math.sin(2 * math.pi * t / wl + ph)
+            pts.append(f"{x0 + ux * t + nx * o:.1f},{y0 + uy * t + ny * o:.1f}")
+        out.append("M" + " L".join(pts))
+    return " ".join(out)
+
+
+def swash(cx, y, half, color) -> str:
+    """Calligraphic thick-thin flourish, mirrored about cx."""
+    def side(s):
+        p = (f"M{cx + s*8:.1f},{y:.1f} C{cx + s*40:.1f},{y - 9:.1f} {cx + s*half*0.55:.1f},{y + 9:.1f} {cx + s*half*0.85:.1f},{y - 1:.1f} "
+             f"C{cx + s*half*0.97:.1f},{y - 6:.1f} {cx + s*half*0.93:.1f},{y - 12:.1f} {cx + s*half*0.86:.1f},{y - 8:.1f} "
+             f"C{cx + s*half*0.82:.1f},{y - 4:.1f} {cx + s*half*0.92:.1f},{y + 1:.1f} {cx + s*half:.1f},{y - 2:.1f}")
+        thick = (f"M{cx + s*14:.1f},{y + 0.3:.1f} C{cx + s*42:.1f},{y - 7.2:.1f} {cx + s*half*0.5:.1f},{y + 8.6:.1f} {cx + s*half*0.78:.1f},{y + 0.8:.1f}")
+        return (f'<path d="{p}" stroke="{color}" stroke-width="0.7" fill="none"/>'
+                f'<path d="{thick}" stroke="{color}" stroke-width="1.7" fill="none" stroke-linecap="round"/>')
+    return (side(1) + side(-1) +
+            f'<path d="M{cx},{y - 4} l4,4 l-4,4 l-4,-4Z" fill="{color}"/>'
+            f'<circle cx="{cx - 9}" cy="{y}" r="1.1" fill="{color}"/><circle cx="{cx + 9}" cy="{y}" r="1.1" fill="{color}"/>')
+
+
+def ribbon(cx, y, w, h, fill, ink) -> str:
+    """Engraved ribbon banner with folded tails, centred on (cx, y)."""
+    x0, x1, t = cx - w / 2, cx + w / 2, h * 0.9
+    bow = 4
+    body = (f"M{x0:.1f},{y - h/2:.1f} Q{cx:.1f},{y - h/2 - bow:.1f} {x1:.1f},{y - h/2:.1f} "
+            f"L{x1:.1f},{y + h/2:.1f} Q{cx:.1f},{y + h/2 - bow:.1f} {x0:.1f},{y + h/2:.1f}Z")
+    def tail(s, xe):
+        xa = xe + s * t * 1.6
+        return (f'<path d="M{xe:.1f},{y - h/2 + 4:.1f} L{xa:.1f},{y - h/2 + 4:.1f} L{xa - s*t*0.45:.1f},{y + 2 + 4:.1f} '
+                f'L{xa:.1f},{y + h/2 + 4:.1f} L{xe:.1f},{y + h/2 + 4:.1f}Z" fill="{fill}" stroke="{ink}" stroke-width="0.7"/>'
+                f'<path d="M{xe:.1f},{y + h/2:.1f} L{xe + s*6:.1f},{y + h/2 + 4:.1f} L{xe:.1f},{y + h/2 + 4:.1f}Z" fill="{ink}" opacity="0.55"/>')
+    hatch = " ".join(f"M{x0 + 3 + i*3:.1f},{y + h/2 - 2.5:.1f} l2,-2.5" for i in range(int((w - 6) / 3)))
+    return (tail(-1, x0 + 6) + tail(1, x1 - 6) +
+            f'<path d="{body}" fill="{fill}" stroke="{ink}" stroke-width="0.8"/>'
+            f'<path d="{hatch}" stroke="{ink}" stroke-width="0.3" opacity="0.35"/>')
 
 
 def leaf_filled(x, y, ang, length, width, ink, paper) -> str:
@@ -585,7 +652,49 @@ def border(kind, W, H, P) -> str:
             petals = "".join(leaf(x, y, a * math.pi / 4, 10 if a % 2 == 0 else 7, 3) for a in range(8))
             out.append(f'<g fill="none" stroke="{g}" stroke-width="0.6">{petals}</g>'
                        f'<circle cx="{x}" cy="{y:.1f}" r="2" fill="{g}"/>')
+    elif kind == "engraved":
+        ink, g = P["ink"], P["gold"]
+        out.append(f'<rect x="13" y="13" width="{W - 26}" height="{H - 26:.2f}" fill="none" stroke="{ink}" stroke-width="2.4"/>')
+        out.append(f'<rect x="17" y="17" width="{W - 34}" height="{H - 34:.2f}" fill="none" stroke="{ink}" stroke-width="0.5"/>')
+        out.append(f'<rect x="33" y="33" width="{W - 66}" height="{H - 66:.2f}" fill="none" stroke="{ink}" stroke-width="0.5"/>')
+        out.append(f'<rect x="37" y="37" width="{W - 74}" height="{H - 74:.2f}" fill="none" stroke="{ink}" stroke-width="1.4"/>')
+        c = 25
+        band = (guilloche_band(c + 14, c, W - c - 14, c, 4.2, 18) + " " + guilloche_band(c + 14, H - c, W - c - 14, H - c, 4.2, 18) + " " +
+                guilloche_band(c, c + 14, c, H - c - 14, 4.2, 18) + " " + guilloche_band(W - c, c + 14, W - c, H - c - 14, 4.2, 18))
+        band2 = (guilloche_band(c + 14, c, W - c - 14, c, 2.2, 9, 2) + " " + guilloche_band(c + 14, H - c, W - c - 14, H - c, 2.2, 9, 2) + " " +
+                 guilloche_band(c, c + 14, c, H - c - 14, 2.2, 9, 2) + " " + guilloche_band(W - c, c + 14, W - c, H - c - 14, 2.2, 9, 2))
+        out.append(f'<path d="{band}" stroke="{ink}" stroke-width="0.4" fill="none" opacity="0.85"/>')
+        out.append(f'<path d="{band2}" stroke="{g}" stroke-width="0.3" fill="none" opacity="0.8"/>')
+        for (x, y) in ((c, c), (W - c, c), (c, H - c), (W - c, H - c)):
+            out.append(f'<circle cx="{x}" cy="{y:.1f}" r="17" fill="{P["paper"]}" stroke="{ink}" stroke-width="1.2"/>'
+                       f'<circle cx="{x}" cy="{y:.1f}" r="14.5" fill="none" stroke="{ink}" stroke-width="0.4"/>'
+                       f'<path d="{hypotrochoid(x, y, 5, 3, 5, 1.95, 3)}" stroke="{ink}" stroke-width="0.35" fill="none"/>'
+                       f'<path d="{hypotrochoid(x, y, 7, 2, 3.2, 1.0, 2)}" stroke="{g}" stroke-width="0.3" fill="none"/>'
+                       f'<circle cx="{x}" cy="{y:.1f}" r="1.6" fill="{ink}"/>')
+        for (x, y) in ((W / 2, H - c),):  # medallion at bottom centre
+            out.append(f'<ellipse cx="{x}" cy="{y:.1f}" rx="30" ry="9" fill="{P["paper"]}" stroke="{ink}" stroke-width="0.8"/>'
+                       f'<path d="{hypotrochoid(x, y, 5, 3, 5, 1.1, 3)}" stroke="{ink}" stroke-width="0.3" fill="none" transform="translate({x} {y}) scale(2.4 0.75) translate({-x} {-y})"/>')
     return "".join(out)
+
+
+def aged_paper(W, H, P) -> str:
+    """Parchment texture, darkened edges and a few foxing spots."""
+    import random
+    rng = random.Random(3)
+    spots = "".join(f'<circle cx="{rng.uniform(40, W - 40):.0f}" cy="{rng.uniform(40, H - 40):.0f}" r="{rng.uniform(4, 16):.1f}" '
+                    f'fill="#8A5A2B" opacity="{rng.uniform(0.04, 0.09):.3f}" filter="url(#ft-blur)"/>' for _ in range(14))
+    return (f'<g id="ft-aged"><defs><filter id="ft-tex" x="0" y="0" width="100%" height="100%">'
+            f'<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="4"/>'
+            f'<feColorMatrix values="0 0 0 0 0.35  0 0 0 0 0.24  0 0 0 0 0.12  0 0 0 -1.6 1.15"/></filter>'
+            f'<filter id="ft-blot" x="0" y="0" width="100%" height="100%">'
+            f'<feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="9"/>'
+            f'<feColorMatrix values="0 0 0 0 0.45  0 0 0 0 0.3  0 0 0 0 0.12  0 0 0 -2.2 1.05"/></filter>'
+            f'<filter id="ft-blur"><feGaussianBlur stdDeviation="3"/></filter>'
+            f'<radialGradient id="ft-vig" cx="50%" cy="48%" r="72%">'
+            f'<stop offset="62%" stop-color="#7A5226" stop-opacity="0"/><stop offset="100%" stop-color="#6B4520" stop-opacity="0.32"/></radialGradient></defs>'
+            f'<rect width="{W}" height="{H:.1f}" filter="url(#ft-blot)" opacity="0.35"/>'
+            f'<rect width="{W}" height="{H:.1f}" filter="url(#ft-tex)" opacity="0.22"/>'
+            f'{spots}<rect width="{W}" height="{H:.1f}" fill="url(#ft-vig)"/></g>')
 
 
 # ───────────────────────────── renderer ────────────────────────────────
@@ -796,7 +905,7 @@ class Renderer:
             depth -= 1                  # don't reserve rows for empty generations
         # rows (top = oldest)
         vgap = 26.0
-        top = 132.0
+        top = 142.0 if self.theme.get("banner") else 132.0
         def place_rows(vgap):
             row_y, cur = {}, top
             for g in range(depth, 0 if cpl else -1, -1):
@@ -871,6 +980,8 @@ class Renderer:
         # ── page & border ──
         if self.bg:
             S.append(f'<rect x="0" y="0" width="{W}" height="{H:.2f}" fill="{P["paper"]}"/>')
+        if self.theme.get("aged"):
+            S.append(aged_paper(W, H, P))
         if self.theme["tree_art"]:
             S.append(f'<defs><clipPath id="ft-inner"><rect x="36" y="36" width="{W - 72}" height="{H - 72:.2f}"/></clipPath></defs>'
                      f'<g clip-path="url(#ft-inner)">'
@@ -888,11 +999,19 @@ class Renderer:
         else:
             title = self.title or f"The Family of {f.full}"
             sub = self.subtitle or " · ".join(x for x in (lifespan(f, self.redact), short_place(f.birth.place, 2)) if x)
-        self.text(W / 2, 72, title, 30, font=FONT_DISPLAY, weight="500", style="italic")
-        flo_w = min(150, tw(title, 30) * 0.42)
-        S.append(flourish(W / 2, 86, flo_w, P["gold"]))
-        if sub:
-            self.text(W / 2, 104, sub, 8.4, caps=True, track="2.2", fill=P["ink2"])
+        if self.theme.get("banner"):
+            self.text(W / 2, 80, title, 44, font=self.theme["title_font"], fill=P["ink"])
+            S.append(swash(W / 2, 92, min(230, tw(title, 44, 0.36) * 0.62), P["ink"]))
+            if sub:
+                bw = tw(sub.upper(), 7.6, W_CAPS, 2.0) + 46
+                S.append(ribbon(W / 2, 110, bw, 15, P["card"], P["ink"]))
+                self.text(W / 2, 112.8, sub, 7.6, caps=True, track="2.0", fill=P["ink"])
+        else:
+            self.text(W / 2, 72, title, 30, font=FONT_DISPLAY, weight="500", style="italic")
+            flo_w = min(150, tw(title, 30) * 0.42)
+            S.append(flourish(W / 2, 86, flo_w, P["gold"]))
+            if sub:
+                self.text(W / 2, 104, sub, 8.4, caps=True, track="2.2", fill=P["ink2"])
         # side labels
         if cpl:
             lt = f"Family of {anc[2].full}" if 2 in anc else ""
@@ -1021,7 +1140,10 @@ class Renderer:
                 f'width="{pw / 72:.3f}in" height="{ph_eff / 72:.3f}in">'
                 f'<title>{esc(title)}</title>'
                 f'<style>@import url("{FONTS_URL.replace("&", "&amp;")}");</style>')
-        return head + "".join(S) + "</svg>"
+        out = head + "".join(S) + "</svg>"
+        if self.theme.get("fonts"):
+            out = out.replace(FONT_DISPLAY, self.theme["fonts"][0]).replace(FONT_TEXT, self.theme["fonts"][1])
+        return out
 
     # ── descendants as a connected tree ──
     DS = {1: (150.0, 64.0), 2: (134.0, 58.0), 3: (118.0, 52.0)}
@@ -1342,9 +1464,15 @@ def to_pdf_png(svg: str, svg_w_in: float, svg_h_in: float, pdf: Path | None, png
     js = r"""
 const {chromium} = require('playwright');
 const fs = require('fs');
-const [htmlPath, w, h, pdf, png] = process.argv.slice(2);
+const [htmlPath, w, h, pdf, png, mode] = process.argv.slice(2);
 (async () => {
   const b = await chromium.launch();
+  if (mode === 'texture') {   // render a filter-only layer to JPEG at ~150 dpi
+    const pg = await b.newPage({viewport: {width: Math.round(w*150), height: Math.round(h*150)}});
+    await pg.setContent(fs.readFileSync(htmlPath, 'utf8'));
+    await pg.screenshot({path: pdf, type: 'jpeg', quality: 82});
+    await b.close(); return;
+  }
   const pg = await b.newPage({viewport: {width: Math.round(w*96), height: Math.round(h*96)}, deviceScaleFactor: 2});
   await pg.setContent(fs.readFileSync(htmlPath, 'utf8'), {waitUntil: 'networkidle'});
   await pg.evaluate(() => document.fonts.ready);
@@ -1353,14 +1481,30 @@ const [htmlPath, w, h, pdf, png] = process.argv.slice(2);
   await b.close();
 })().catch(e => { console.error(e); process.exit(1); });
 """
+    env = {**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", "") + ":" +
+           subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()}
     with tempfile.TemporaryDirectory() as td:
         hp, jp = Path(td, "page.html"), Path(td, "print.js")
-        hp.write_text(page_html, encoding="utf-8")
         jp.write_text(js, encoding="utf-8")
+        m = re.search(r'<g id="ft-aged">.*?</g>(?=<)', svg, re.S)
+        if m:  # filters print as enormous bitmaps; bake that one layer into a compressed image
+            vb = re.search(r'viewBox="([^"]+)"', svg)[1]
+            layer = (f'<!doctype html><html><body style="margin:0"><svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}" '
+                     f'style="display:block;width:100vw;height:100vh" preserveAspectRatio="none">'
+                     f'<rect width="100%" height="100%" fill="{PALETTE["paper"]}"/>{m[0]}</svg></body></html>')
+            lp, tj = Path(td, "layer.html"), Path(td, "tex.jpg")
+            lp.write_text(layer, encoding="utf-8")
+            subprocess.run(["node", str(jp), str(lp), f"{svg_w_in:.4f}", f"{svg_h_in:.4f}", str(tj), "", "texture"],
+                           check=True, env=env)
+            import base64
+            _, _, vw, vh = vb.split()
+            img = (f'<image href="data:image/jpeg;base64,{base64.b64encode(tj.read_bytes()).decode()}" '
+                   f'x="0" y="0" width="{vw}" height="{vh}" preserveAspectRatio="none"/>')
+            page_html = page_html.replace(m[0], img)
+        hp.write_text(page_html, encoding="utf-8")
         subprocess.run(["node", str(jp), str(hp), f"{svg_w_in:.4f}", f"{svg_h_in:.4f}",
                         str(pdf.resolve()) if pdf else "", str(png.resolve()) if png else ""],
-                       check=True, env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", "") + ":" +
-                                        subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()})
+                       check=True, env=env)
 
 
 def main(argv=None):

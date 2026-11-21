@@ -31,7 +31,7 @@ python3 familytree.py tree.ged --focus KWZ1-ABC -o tree.svg --pdf tree.pdf
 | `--title`, `--subtitle`, `--note` | auto | heading and footer text |
 | `--redact-living` | off | shows "Living" in place of dates for living people |
 | `--couple` | off | centres the chart on the focus person and their spouse together |
-| `--style` | classic | `classic`, `woodcut` (background tree, carved border) or `heirloom` (ornate border, shaped cards) |
+| `--style` | classic | `classic`, `woodcut` (background tree, carved border), `heirloom` (ornate border, shaped cards) or `victorian` (aged parchment, guilloché border, script title) |
 | `--descendants` | tree | `tree` draws descendants as connected cards; `list` uses an indented outline |
 | `--tree-art` | per style | opacity of the background woodcut tree, `0` hides it |
 | `--no-ids` | off | hides FamilySearch IDs |
