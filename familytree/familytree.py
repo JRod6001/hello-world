@@ -42,6 +42,7 @@ class Person:
     death: Event = field(default_factory=Event)
     fsid: str | None = None
     living: bool | None = None
+    parents_unknown: bool = False          # e.g. an orphan: draw no empty parent boxes
     famc: list[str] = field(default_factory=list)
     fams: list[str] = field(default_factory=list)
 
@@ -154,7 +155,7 @@ class Tree:
             t.people[pid] = Person(
                 pid, d.get("given", ""), d.get("surname", ""), (d.get("sex") or "U")[:1].upper(),
                 Event(**(d.get("birth") or {})), Event(**(d.get("death") or {})),
-                d.get("fsid"), d.get("living"))
+                d.get("fsid"), d.get("living"), bool(d.get("parents_unknown")))
         for fid, d in data.get("families", {}).items():
             t.families[fid] = Family(fid, d.get("husb"), d.get("wife"),
                                      list(d.get("children", [])), Event(**(d.get("marr") or {})))
@@ -1032,22 +1033,28 @@ class Renderer:
         f = self.f
         if cpl:
             hu, wi = anc.get(2), anc.get(3)
-            title = self.title or f"The {(hu or wi or f).surname} Family"
+            title = self.title if self.title is not None else f"The {(hu or wi or f).surname} Family"
             sub = self.subtitle or " & ".join(p.full for p in (hu, wi) if p) + " · their ancestry and descendants"
         else:
-            title = self.title or f"The Family of {f.full}"
+            title = self.title if self.title is not None else f"The Family of {f.full}"
             sub = self.subtitle or " · ".join(x for x in (lifespan(f, self.redact), short_place(f.birth.place, 2)) if x)
         if self.theme.get("banner"):
-            self.text(W / 2, 80, title, 44, font=self.theme["title_font"], fill=P["ink"])
-            S.append(swash(W / 2, 92, min(230, tw(title, 44, 0.36) * 0.62), P["ink"]))
+            ry = 110
+            if title:
+                self.text(W / 2, 80, title, 44, font=self.theme["title_font"], fill=P["ink"])
+                S.append(swash(W / 2, 92, min(230, tw(title, 44, 0.36) * 0.62), P["ink"]))
+            else:
+                ry = 96
             if sub:
                 bw = tw(sub.upper(), 7.6, W_CAPS, 2.0) + 46
-                S.append(ribbon(W / 2, 110, bw, 15, P["card"], P["ink"]))
-                self.text(W / 2, 112.8, sub, 7.6, caps=True, track="2.0", fill=P["ink"])
-        else:
+                S.append(ribbon(W / 2, ry, bw, 15, P["card"], P["ink"]))
+                self.text(W / 2, ry + 2.8, sub, 7.6, caps=True, track="2.0", fill=P["ink"])
+        elif title:
             self.text(W / 2, 72, title, 30, font=FONT_DISPLAY, weight="500", style="italic")
             flo_w = min(150, tw(title, 30) * 0.42)
             S.append(flourish(W / 2, 86, flo_w, P["gold"]))
+        else:
+            S.append(flourish(W / 2, 86, 150, P["gold"]))
             if sub:
                 self.text(W / 2, 104, sub, 8.4, caps=True, track="2.2", fill=P["ink2"])
         # side labels
@@ -1090,7 +1097,7 @@ class Renderer:
             if n in anc:
                 self.card(cx, row_y[g], w, GEN[g]["h"], anc[n], g,
                           P["gold"] if cpl and n < 4 else self.side_color(n), focus=bool(cpl and n < 4))
-            elif n // 2 in anc:     # a known person whose parent is missing: show the gap
+            elif n // 2 in anc and not anc[n // 2].parents_unknown:  # show research gaps
                 self.card(cx, row_y[g], w, GEN[g]["h"], None, g, P["faint"])
 
         # ── focus + spouses ──
@@ -1176,7 +1183,7 @@ class Renderer:
         ph_eff = pw * H / W
         head = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W:.2f} {H:.2f}" '
                 f'width="{pw / 72:.3f}in" height="{ph_eff / 72:.3f}in">'
-                f'<title>{esc(title)}</title>'
+                f'<title>{esc(title or sub or 'Family tree')}</title>'
                 f'<style>@import url("{FONTS_URL.replace("&", "&amp;")}");</style>')
         out = head + "".join(S) + "</svg>"
         if self.theme.get("fonts"):
@@ -1552,7 +1559,7 @@ def main(argv=None):
     ap.add_argument("--up", type=int, default=4, help="ancestor generations (1–5, default 4)")
     ap.add_argument("--down", type=int, default=3, help="descendant generations (0–3, default 3)")
     ap.add_argument("--page", default="tabloid", choices=sorted(PAGES), help="paper size, landscape (default tabloid 17×11 in)")
-    ap.add_argument("--title")
+    ap.add_argument("--title", help='heading text; pass --title "" for no heading')
     ap.add_argument("--subtitle")
     ap.add_argument("--note", help="replace the footer line")
     ap.add_argument("--couple", action="store_true",
