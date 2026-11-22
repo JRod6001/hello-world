@@ -36,6 +36,7 @@ python3 familytree.py tree.ged --focus KWZ1-ABC -o tree.svg --pdf tree.pdf
 | `--bg-image`, `--bg-opacity` | none, 0.32 | fade a photo or engraving in behind the chart (replaces the drawn tree) |
 | `--tree-art` | per style | opacity of the background woodcut tree, `0` hides it |
 | `--no-ids` | off | hides FamilySearch IDs |
+| `--export-gedcom`, `--export-csv` | none | also save the loaded tree as GEDCOM 5.5.1 or a spreadsheet |
 | `--no-background` | off | white paper, to save ink |
 
 Producing a PDF or PNG needs Node with Playwright/Chromium. The PDF embeds the web fonts. The SVG loads the same fonts from Google Fonts and falls back to Garamond or Georgia when they aren't available.

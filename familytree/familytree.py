@@ -122,6 +122,8 @@ class Tree:
                         rec.fsid = rec.fsid or val.split("/")[-1]
                     elif tag == "_LIVING" or tag == "LIVING":
                         rec.living = val.upper() in ("Y", "YES", "TRUE", "1")
+                    elif tag == "NOTE" and "parents unknown" in val.lower():
+                        rec.parents_unknown = True
                     elif tag == "FAMC":
                         rec.famc.append(ref)
                     elif tag == "FAMS":
@@ -1496,6 +1498,59 @@ def audit(tree: Tree, focus: Person, anc: dict[int, Person], up: int, down: int)
     return issues
 
 
+# ───────────────────────────── exports ─────────────────────────────────
+
+def export_gedcom(tree: Tree, path: Path, source="FamilySearch Family Tree"):
+    """Write GEDCOM 5.5.1 (UTF-8) with FamilySearch IDs as _FSFTID."""
+    xi = {pid: f"I{k}" for k, pid in enumerate(tree.people, 1)}
+    xf = {fid: f"F{k}" for k, fid in enumerate(tree.families, 1)}
+    o = ["0 HEAD", "1 SOUR familytree.py", "1 GEDC", "2 VERS 5.5.1", "2 FORM LINEAGE-LINKED", "1 CHAR UTF-8",
+         f"1 DATE {_dt.date.today().strftime('%d %b %Y').upper()}", f"1 NOTE Transcribed from the {source}"]
+    def ev(tag, e):
+        if e.date or e.place:
+            o.append(f"1 {tag}")
+            if e.date: o.append(f"2 DATE {e.date}")
+            if e.place: o.append(f"2 PLAC {e.place}")
+    for pid, p in tree.people.items():
+        o += [f"0 @{xi[pid]}@ INDI", f"1 NAME {p.given} /{p.surname}/".replace("  ", " "), f"1 SEX {p.sex or 'U'}"]
+        ev("BIRT", p.birth)
+        if p.death.date or p.death.place:
+            ev("DEAT", p.death)
+        elif p.living is False:
+            o.append("1 DEAT Y")
+        if p.fsid:
+            for i, fs in enumerate(x.strip() for x in p.fsid.split("/")):
+                o.append(f"1 {'_FSFTID' if i == 0 else 'NOTE Also recorded in FamilySearch as'} {fs}")
+        if p.parents_unknown:
+            o.append("1 NOTE Orphan; parents unknown.")
+        o += [f"1 FAMC @{xf[f]}@" for f in p.famc if f in xf] + [f"1 FAMS @{xf[f]}@" for f in p.fams if f in xf]
+    for fid, f in tree.families.items():
+        o.append(f"0 @{xf[fid]}@ FAM")
+        if f.husb in xi: o.append(f"1 HUSB @{xi[f.husb]}@")
+        if f.wife in xi: o.append(f"1 WIFE @{xi[f.wife]}@")
+        ev("MARR", f.marr)
+        o += [f"1 CHIL @{xi[c]}@" for c in f.children if c in xi]
+    o.append("0 TRLR")
+    path.write_text("\n".join(o) + "\n", encoding="utf-8")
+
+
+def export_csv(tree: Tree, path: Path):
+    import csv
+    with path.open("w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.writer(fh)
+        w.writerow(["Given names", "Surname", "Sex", "Born", "Birthplace", "Died", "Death place",
+                    "FamilySearch ID", "Father", "Mother", "Spouse(s)", "Children", "Notes"])
+        for p in sorted(tree.people.values(), key=lambda p: (p.surname, p.given)):
+            fa, mo = tree.parents(p)
+            us = tree.unions(p)
+            w.writerow([p.given, p.surname, p.sex, p.birth.date or "", p.birth.place or "",
+                        p.death.date or ("Living" if is_living(p) else "Deceased"), p.death.place or "",
+                        p.fsid or "", fa.full if fa else "", mo.full if mo else "",
+                        "; ".join(sp.full for sp, _, _ in us if sp),
+                        "; ".join(k.full for _, _, ks in us for k in ks),
+                        "Orphan; parents unknown" if p.parents_unknown else ""])
+
+
 # ───────────────────────────── outputs ─────────────────────────────────
 
 def to_pdf_png(svg: str, svg_w_in: float, svg_h_in: float, pdf: Path | None, png: Path | None):
@@ -1576,10 +1631,16 @@ def main(argv=None):
     ap.add_argument("-o", "--out", type=Path, default=Path("family-tree.svg"))
     ap.add_argument("--pdf", type=Path)
     ap.add_argument("--png", type=Path)
+    ap.add_argument("--export-gedcom", type=Path, help="also write the loaded tree as GEDCOM 5.5.1")
+    ap.add_argument("--export-csv", type=Path, help="also write a one-row-per-person spreadsheet")
     a = ap.parse_args(argv)
 
     tree = Tree.from_json(a.source) if a.source.suffix.lower() == ".json" else Tree.from_gedcom(a.source)
     focus = tree.find(a.focus)
+    if a.export_gedcom:
+        export_gedcom(tree, a.export_gedcom); print("wrote", a.export_gedcom)
+    if a.export_csv:
+        export_csv(tree, a.export_csv); print("wrote", a.export_csv)
     couple = None
     if a.couple:
         couple = next((fam for sp, fam, _ in tree.unions(focus) if sp), None)
