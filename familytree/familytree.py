@@ -712,7 +712,10 @@ GEN = {
     2: dict(h=66, w=176),
     3: dict(h=58, w=126),
     4: dict(h=54, w=None),
+    5: dict(h=104, w=None),   # outermost row: cards stand on end
 }
+GEN_COMPACT = {0: dict(h=72, w=214), 1: dict(h=62, w=196), 2: dict(h=60, w=176), 3: dict(h=54, w=126),
+               4: dict(h=50, w=None), 5: dict(h=104, w=None)}
 
 
 class Renderer:
@@ -721,7 +724,7 @@ class Renderer:
                  background=True, note=None, couple: Family | None = None,
                  style="classic", desc_layout="tree", tree_art=None, bg_image=None, bg_opacity=0.32):
         self.t, self.f = tree, focus
-        self.up, self.down = max(1, min(4, up)), max(0, min(3, down))
+        self.up, self.down = max(1, min(5, up)), max(0, min(3, down))
         pw, ph = PAGES[page]
         self.W = 1224.0                     # design width; everything scales to page
         self.H = self.W * ph / pw
@@ -761,6 +764,18 @@ class Renderer:
 
     # ── person card ──
     def card(self, cx, y, w, h, p: Person | None, gen: int, color: str, focus=False):
+        if gen >= 5:  # narrow outer-row card: draw the frame upright, set the text sideways
+            self.card_shape(cx - w / 2, y, w, h, color if p else PALETTE["faint"], False) if p else \
+                self.svg.append(f'<rect x="{cx - w/2:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" rx="3" fill="none" '
+                                f'stroke="{PALETTE["faint"]}" stroke-width="0.5" stroke-dasharray="2 2.5"/>')
+            cy = y + h / 2
+            self.svg.append(f'<g transform="rotate(-90 {cx:.2f} {cy:.2f})">')
+            if p is None:
+                self.text(cx, cy + 2.5, "not yet identified", 6.0, style="italic", fill=PALETTE["faint"])
+            else:
+                self.card_text(cx, cy - w / 2, h, w, p, gen)
+            self.svg.append("</g>")
+            return
         x = cx - w / 2
         S = self.svg
         if p is None:
@@ -770,7 +785,10 @@ class Renderer:
                       7.2 if gen <= 3 else 6.4, style="italic", fill=PALETTE["faint"])
             return
         self.card_shape(x, y, w, h, color, focus)
-        pad = 7 if gen >= 3 else 10
+        self.card_text(cx, y, w, h, p, gen)
+
+    def card_text(self, cx, y, w, h, p: Person, gen: int):
+        pad = 4 if gen >= 5 else 7 if gen >= 3 else 10
         iw = w - 2 * pad
         ls = lifespan(p, self.redact)
         hide = self.redact and is_living(p)
@@ -780,8 +798,10 @@ class Renderer:
             sizes = dict(given=11.6, sur=8.2, l1=7.4, l2=7.4, id=5.6)
         elif gen == 3:
             sizes = dict(given=9.4, sur=7.0, l1=7.0, id=5.4)
-        else:
+        elif gen == 4:
             sizes = dict(given=8.0, sur=6.2, l1=6.3, id=5.0)
+        else:
+            sizes = dict(given=6.4, sur=5.0, l1=5.3, id=4.4)
         lines = []  # (text, size, kwargs)
         lines.append((fit_given(p.given or "—", iw, sizes["given"]), sizes["given"],
                       dict(font=FONT_DISPLAY, weight="600")))
@@ -810,13 +830,14 @@ class Renderer:
         if self.ids and p.fsid:
             lines.append((p.fsid, sizes["id"], dict(fill=PALETTE["faint"], track="0.6")))
         # vertical layout: distribute baselines inside the card
-        heights = [s * 1.22 for _, s, _ in lines]
+        lf = 1.15 if gen >= 5 else 1.22
+        heights = [s * lf for _, s, _ in lines]
         total = sum(heights)
         if total > h - 6:  # drop lowest-priority lines until it fits
             while total > h - 6 and len(lines) > 2:
                 drop = 2 if len(lines) > 3 else len(lines) - 1
                 lines.pop(drop if not (self.ids and p.fsid) else len(lines) - 2)
-                heights = [s * 1.22 for _, s, _ in lines]
+                heights = [s * lf for _, s, _ in lines]
                 total = sum(heights)
         yy = y + (h - total) / 2
         for (s, size, kw), lh in zip(lines, heights):
@@ -906,6 +927,9 @@ class Renderer:
         depth = self.up
         while depth > 1 and not any(n in anc for n in range(2 ** depth, 2 ** (depth + 1))):
             depth -= 1                  # don't reserve rows for empty generations
+        if depth >= 5:                  # five generations: tighten rows so everything fits the sheet
+            GEN.update(GEN_COMPACT)
+            self.DS = {1: (150.0, 56.0), 2: (134.0, 50.0), 3: (118.0, 46.0)}
         # rows (top = oldest)
         vgap = 26.0
         top = 142.0 if self.theme.get("banner") else 132.0
@@ -923,8 +947,8 @@ class Renderer:
             i = n - 2 ** g
             sw = CW / 2 ** g
             cx = mx + sw * (i + 0.5)
-            w = GEN[g]["w"] or (sw - 5)
-            w = min(w, sw - (5 if g >= 4 else 10))
+            w = GEN[g]["w"] or (sw - (3 if g >= 5 else 5))
+            w = min(w, sw - (3 if g >= 5 else 5 if g >= 4 else 10))
             return g, cx, w
 
         # ── descendants block (laid out first so the page can grow if needed) ──
@@ -966,15 +990,15 @@ class Renderer:
         if tplan:
             avail = self.H - 54 - tree_bottom
             need = tplan["height"] + 8
-            rows = depth + (0 if cpl else 1)
+            rows = depth - 1 if cpl else depth      # number of gaps that sit above tree_bottom
             if need > avail:
-                vgap = max(12.0, vgap - (need - avail) / rows)
+                vgap = max(12.0, vgap - (need - avail) / max(1, rows) - 0.01)
                 row_y, tree_bottom = place_rows(vgap)
-                if need > self.H - 54 - tree_bottom:
+                if need > self.H - 54 - tree_bottom + 0.5:
                     self.H = tree_bottom + need + 54
                     self.warnings.append("descendant tree exceeds the page; canvas was extended")
             else:
-                vgap += min(30.0, (avail - need) * 0.75 / rows)
+                vgap += min(30.0, (avail - need) * 0.75 / max(1, rows))
                 row_y, tree_bottom = place_rows(vgap)
         H = self.H
         footer_y = H - (34 if self.theme["border"] == "fine" else 44)
@@ -1035,7 +1059,7 @@ class Renderer:
         self.text(mx + CW / 4, top - 10, lt, 6.8, caps=True, track="2.4", fill=P["sage"])
         self.text(mx + 3 * CW / 4, top - 10, rt, 6.8, caps=True, track="2.4", fill=P["clay"])
         # generation numerals in the margin
-        romans = ["", "I", "II", "III", "IV"]
+        romans = ["", "I", "II", "III", "IV", "V"]
         for g in range(1, depth + 1):
             yc = row_y[g] + GEN[g]["h"] / 2
             self.text(46, yc + 3, romans[g], 8.5, font=FONT_DISPLAY, fill=P["gold"], weight="600")
@@ -1433,7 +1457,7 @@ def audit(tree: Tree, focus: Person, anc: dict[int, Person], up: int, down: int)
             gap = cy - py
             if gap < 13:
                 issues.append(f"{p.full} born {py}, only {gap} yrs before child {child.full} ({cy})")
-            if gap > (60 if p.sex == "F" or n % 2 else 80):
+            if gap > (48 if p.sex == "F" or n % 2 else 75):
                 issues.append(f"{p.full} born {py}, {gap} yrs before child {child.full} ({cy})")
         pd = year(p.death.date)
         if pd and cy and pd < cy - (1 if n % 2 == 0 else 0):
@@ -1525,7 +1549,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source", type=Path, help="GEDCOM (.ged) or JSON export")
     ap.add_argument("--focus", required=True, help="FamilySearch ID, GEDCOM xref, or unique name fragment")
-    ap.add_argument("--up", type=int, default=4, help="ancestor generations (1–4, default 4)")
+    ap.add_argument("--up", type=int, default=4, help="ancestor generations (1–5, default 4)")
     ap.add_argument("--down", type=int, default=3, help="descendant generations (0–3, default 3)")
     ap.add_argument("--page", default="tabloid", choices=sorted(PAGES), help="paper size, landscape (default tabloid 17×11 in)")
     ap.add_argument("--title")

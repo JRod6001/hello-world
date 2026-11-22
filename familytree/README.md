@@ -26,7 +26,7 @@ python3 familytree.py tree.ged --focus KWZ1-ABC -o tree.svg --pdf tree.pdf
 | option | default | notes |
 |---|---|---|
 | `--focus` | required | FamilySearch ID, GEDCOM xref, or a unique name fragment |
-| `--up` / `--down` | 4 / 3 | ancestor and descendant generations |
+| `--up` / `--down` | 4 / 3 | ancestor (1–5; the 5th row is set sideways) and descendant (0–3) generations |
 | `--page` | tabloid | `tabloid`, `a3`, `a2`, `18x24`, `24x36`, `letter`, `a4` (landscape) |
 | `--title`, `--subtitle`, `--note` | auto | heading and footer text |
 | `--redact-living` | off | shows "Living" in place of dates for living people |
